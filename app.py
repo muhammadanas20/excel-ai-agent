@@ -44,9 +44,8 @@ if uploaded_file and prompt:
         output.seek(0)
 
         # Download button
-        st.download_button("📥 Download Cleaned Excel", output.getvalue(), "cleaned_data.xlsx")
+        st.download_button("📥 Download Cleaned Excel", output.getvalue(), "cleaned_data.xlsx", key="download_excel")
     except Exception as e:
         st.error("⚠️ Could not convert AI reply to Excel. Check the format.")
         st.code(ai_reply)
         st.exception(e)
-        
