@@ -1,30 +1,41 @@
 import streamlit as st
 import pandas as pd
-import openai
+import requests
 from io import BytesIO
 import time
 
 # Configure page
 st.set_page_config(
-    page_title="📊 Excel Data Refiner with AI",
+    page_title="📊 Excel Data Refiner with AI (OpenRouter)",
     page_icon="📊",
     layout="wide"
 )
 
 def main():
-    st.title("📊 Excel Data Refiner with AI")
+    st.title("📊 Excel Data Refiner with AI (OpenRouter)")
     st.caption("Upload an Excel file and let AI help clean, transform, or analyze your data")
 
-    # Check for API key
-    if "openai_api_key" not in st.secrets:
-        st.error("⚠️ OpenAI API key not found in secrets. Please add it to your Streamlit secrets.")
+    # OpenRouter configuration
+    OPENROUTER_API_KEY = st.secrets.get("OPENROUTER_API_KEY", "")
+    OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+    
+    if not OPENROUTER_API_KEY:
+        st.error("⚠️ OpenRouter API key not found. Please add OPENROUTER_API_KEY to your Streamlit secrets.")
         return
 
-    try:
-        openai.api_key = st.secrets["openai_api_key"]
-    except Exception as e:
-        st.error(f"⚠️ Error setting up OpenAI API: {str(e)}")
-        return
+    # Model selection
+    with st.expander("⚙️ AI Settings", expanded=False):
+        selected_model = st.selectbox(
+            "Choose AI Model",
+            [
+                "anthropic/claude-3-opus",
+                "anthropic/claude-3-sonnet",
+                "openai/gpt-4-turbo",
+                "openai/gpt-3.5-turbo",
+                "google/gemini-pro"
+            ],
+            index=2
+        )
 
     # File upload section
     with st.expander("📤 Upload Excel File", expanded=True):
@@ -45,7 +56,6 @@ def main():
 
     if uploaded_file and prompt:
         try:
-            # Show loading state
             with st.spinner("🔍 Reading and processing your file..."):
                 # Read Excel file
                 try:
@@ -60,46 +70,62 @@ def main():
                 # Convert to CSV for AI processing
                 raw_data = df.to_csv(index=False)
 
-                # Call OpenAI API
+                # Call OpenRouter API
+                headers = {
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json"
+                }
+
+                payload = {
+                    "model": selected_model,
+                    "messages": [
+                        {
+                            "role": "system", 
+                            "content": "You are a helpful data analyst. Respond with clean, well-formatted CSV data that can be directly read by pandas."
+                        },
+                        {
+                            "role": "user",
+                            "content": f"Here is the data:\n{raw_data}\n\nInstruction:\n{prompt}\n\nPlease return only the cleaned/processed data in CSV format, with no additional commentary or explanation."
+                        }
+                    ],
+                    "temperature": 0.3
+                }
+
                 try:
-                    response = openai.chat.completions.create(
-                        model="gpt-4o",  # or "gpt-3.5-turbo"
-                        messages=[
-                            {"role": "system", "content": "You are a helpful data analyst. Respond with clean, well-formatted CSV data that can be directly read by pandas."},
-                            {"role": "user", "content": f"Here is the data:\n{raw_data}\n\nInstruction:\n{prompt}\n\nPlease return only the cleaned/processed data in CSV format, with no additional commentary or explanation."}
-                        ],
-                        temperature=0.3  # More deterministic output
+                    response = requests.post(
+                        OPENROUTER_API_URL,
+                        headers=headers,
+                        json=payload,
+                        timeout=30
                     )
-                    ai_reply = response.choices[0].message.content
-                except Exception as e:
-                    st.error(f"❌ OpenAI API error: {str(e)}")
+                    response.raise_for_status()
+                    ai_reply = response.json()["choices"][0]["message"]["content"]
+                except requests.exceptions.RequestException as e:
+                    st.error(f"❌ OpenRouter API error: {str(e)}")
+                    if response.status_code == 429:
+                        st.error("You've exceeded your rate limits. Please try again later or upgrade your plan.")
                     return
 
                 # Process AI response
                 try:
-                    # Parse AI's cleaned data as CSV
                     cleaned_df = pd.read_csv(BytesIO(ai_reply.encode()))
                     
                     st.success("✅ Data processed successfully!")
                     st.balloons()
                     
-                    # Display results
                     st.subheader("Processed Data Preview")
                     st.dataframe(cleaned_df)
                     
-                    # Create Excel file for download
                     output = BytesIO()
                     with pd.ExcelWriter(output, engine='openpyxl') as writer:
                         cleaned_df.to_excel(writer, index=False)
                     output.seek(0)
                     
-                    # Download button
                     st.download_button(
                         label="📥 Download Processed Excel",
                         data=output.getvalue(),
                         file_name="processed_data.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        help="Download the processed data as an Excel file"
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
                     
                 except Exception as e:
