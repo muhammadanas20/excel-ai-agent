@@ -63,3 +63,23 @@ if uploaded_file:
     output = BytesIO()
     df.to_excel(output, index=False, engine='openpyxl')
     st.download_button("📥 Download Cleaned Excel", output.getvalue(), "cleaned_data.xlsx")
+    from io import BytesIO
+import pandas as pd
+import streamlit as st
+
+# Example DataFrame (you should replace this with your processed df)
+df = pd.DataFrame({
+    "Name": ["Ali", "Sara", "John"],
+    "Age": [25, 30, 22],
+    "Country": ["Pakistan", "USA", "UK"]
+})
+
+output = BytesIO()
+df.to_excel(output, index=False, engine='openpyxl')
+output.seek(0)  # Important to reset stream position
+st.download_button("📥 Download Cleaned Excel", output.getvalue(), "cleaned_data.xlsx")
+uploaded_file = st.file_uploader("Upload Excel", type=["xlsx"])
+if uploaded_file:
+    df = pd.read_excel(uploaded_file)
+    # Then your download button code...
+
