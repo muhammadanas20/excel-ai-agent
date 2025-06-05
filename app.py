@@ -1,83 +1,46 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import openai
-
-# Setup
+from openai import OpenAI
 import streamlit as st
-import openai
+from openai import OpenAI
 
-openai.api_key = st.secrets["openai_api_key"]
+# Load API key from secrets
+client = OpenAI(api_key=st.secrets["openai"]["api_key"])
 
-openai.api_base = "https://openrouter.ai/api/v1"
+st.title("Excel Data Refiner & Chart Generator")
 
-st.title("📊 Excel AI Assistant")
-uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"])
+uploaded_file = st.file_uploader("Upload your Excel file", type=["xlsx", "xls"])
 
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
-    st.write("🔍 Excel Preview", df.head())
-    st.subheader("🤖 Ask AI to Modify Excel Data")
-user_instruction = st.text_area("Enter your instruction", 
-                                placeholder="E.g., 'Remove blank rows and make a bar chart of sales'")
+    st.subheader("Raw Data")
+    st.write(df)
 
-ai_code = ""  # Keep globally accessible
-if st.button("Ask AI"):
-    if user_instruction:
-        with st.spinner("AI is working..."):
-            prompt = f"""You are an expert Python developer. Here's a sample DataFrame:\n\n{df.head().to_string()}\n\nInstruction: {user_instruction}\n\nNow write Python code using pandas/matplotlib to do it. DataFrame is named 'df'. Return only Python code."""
+    user_prompt = st.text_area("Enter your request (e.g., 'Clean missing data and plot sales by region')")
+
+    if st.button("Ask AI", key="ask_ai_button"):
+        with st.spinner("Thinking..."):
+            # Create chat messages
+            messages = [
+                {"role": "system", "content": "You are a helpful assistant who analyzes and cleans Excel data."},
+                {"role": "user", "content": f"Data:\n{df.head(10).to_string()}\n\nRequest:\n{user_prompt}"}
+            ]
 
             try:
-                response = openai.ChatCompletion.create(
+                response = client.chat.completions.create(
                     model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": "You are a helpful code assistant."},
-                        {"role": "user", "content": prompt}
-                    ]
+                    messages=messages,
+                    temperature=0.5,
                 )
 
-                ai_code = response['choices'][0]['message']['content']
-                st.success("✅ AI Code Generated:")
-                st.code(ai_code, language='python')
-
-                st.session_state["ai_code"] = ai_code  # Save to session for later
+                reply = response.choices[0].message.content
+                st.markdown("### AI Response")
+                st.write(reply)
 
             except Exception as e:
-                st.error(f"Error: {e}")
-    else:
-        st.error("❗ Please enter some instructions.")
-
-
-    user_instruction = st.text_area("What do you want AI to do with this data?")
-
-    if st.button("Ask AI", key="ask_ai_btn"):
-        prompt = f"""You are an expert Python developer. Here's a sample DataFrame:\n\n{df.head().to_string()}\n\nInstruction: {user_instruction}\n\nWrite Python code using pandas/matplotlib to do it. DataFrame is named 'df'. Only output Python code."""
-
-        try:
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a Python code assistant."},
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            ai_code = response['choices'][0]['message']['content']
-            st.code(ai_code, language='python')
-            st.session_state["ai_code"] = ai_code
-        except Exception as e:
-            st.error(f"OpenAI Error: {e}")
-
-    if "ai_code" in st.session_state:
-        if st.button("▶️ Run the AI Code", key="run_code_btn"):
-            try:
-                local_vars = {"df": df, "plt": plt}
-                exec(st.session_state["ai_code"], {}, local_vars)
-                st.success("✅ Code executed.")
-                if "df" in local_vars:
-                    st.write("🧾 Updated DataFrame", local_vars["df"])
-            except Exception as e:
-                st.error(f"Error running AI code: {e}")
-    # Step 1: Clean Data
+                st.error(f"Error from OpenAI: {str(e)}")
+# Step 1: Clean Data
     if st.button("🧹 Clean Data"):
         df.dropna(inplace=True)
         df.columns = [col.strip().title() for col in df.columns]
