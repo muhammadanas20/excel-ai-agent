@@ -3,6 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from openai import OpenAI
 import streamlit as st
+from io import BytesIO
+
 from openai import OpenAI
 
 # Load API key from secrets
@@ -63,4 +65,3 @@ if uploaded_file:
     output = BytesIO()
     df.to_excel(output, index=False, engine='openpyxl')
     st.download_button("📥 Download Cleaned Excel", output.getvalue(), "cleaned_data.xlsx")
-from io import BytesIO
