@@ -4,7 +4,11 @@ import matplotlib.pyplot as plt
 import openai
 
 # Setup
-openai.api_key = "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"
+import streamlit as st
+import openai
+
+openai.api_key = st.secrets["openai_api_key"]
+
 openai.api_base = "https://openrouter.ai/api/v1"
 
 st.title("📊 Excel AI Assistant")
