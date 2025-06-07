@@ -2,40 +2,27 @@ import streamlit as st
 import pandas as pd
 import requests
 from io import BytesIO
-import time
 
 # Configure page
 st.set_page_config(
-    page_title="📊 Excel Data Refiner with AI (OpenRouter)",
+    page_title="📊 Excel Data Refiner with AI (Llama 3)",
     page_icon="📊",
     layout="wide"
 )
 
 def main():
-    st.title("📊 Excel Data Refiner with AI (OpenRouter)")
+    st.title("📊 Excel Data Refiner with AI (Llama 3)")
     st.caption("Upload an Excel file and let AI help clean, transform, or analyze your data")
 
-    # OpenRouter configuration
-    OPENROUTER_API_KEY = st.secrets.get("OPENROUTER_API_KEY", "")
-    OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+    # DeepInfra configuration
+    DEEPINFRA_API_KEY = st.secrets.get("DEEPINFRA_API_KEY", "")
+    DEEPINFRA_API_URL = "https://api.deepinfra.com/v1/openai/chat/completions"
+    MODEL = "meta-llama/Meta-Llama-3-70B-Instruct"  # Free tier eligible
     
-    if not OPENROUTER_API_KEY:
-        st.error("⚠️ OpenRouter API key not found. Please add OPENROUTER_API_KEY to your Streamlit secrets.")
+    if not DEEPINFRA_API_KEY:
+        st.error("⚠️ DeepInfra API key not found. Please add DEEPINFRA_API_KEY to your Streamlit secrets.")
+        st.info("Get a free key: https://deepinfra.com")
         return
-
-    # Model selection
-    with st.expander("⚙️ AI Settings", expanded=False):
-        selected_model = st.selectbox(
-            "Choose AI Model",
-            [
-                "anthropic/claude-3-opus",
-                "anthropic/claude-3-sonnet",
-                "openai/gpt-4-turbo",
-                "openai/gpt-3.5-turbo",
-                "google/gemini-pro"
-            ],
-            index=2
-        )
 
     # File upload section
     with st.expander("📤 Upload Excel File", expanded=True):
@@ -70,40 +57,44 @@ def main():
                 # Convert to CSV for AI processing
                 raw_data = df.to_csv(index=False)
 
-                # Call OpenRouter API
+                # Prepare API request
                 headers = {
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Authorization": f"Bearer {DEEPINFRA_API_KEY}",
                     "Content-Type": "application/json"
                 }
 
                 payload = {
-                    "model": selected_model,
+                    "model": MODEL,
                     "messages": [
                         {
-                            "role": "system", 
-                            "content": "You are a helpful data analyst. Respond with clean, well-formatted CSV data that can be directly read by pandas."
+                            "role": "system",
+                            "content": """You are a professional data analyst. 
+                            Return ONLY cleaned/processed data in CSV format. 
+                            No explanations, no additional text."""
                         },
                         {
                             "role": "user",
-                            "content": f"Here is the data:\n{raw_data}\n\nInstruction:\n{prompt}\n\nPlease return only the cleaned/processed data in CSV format, with no additional commentary or explanation."
+                            "content": f"DATA:\n{raw_data}\n\nTASK:\n{prompt}\n\nOUTPUT:"
                         }
                     ],
-                    "temperature": 0.3
+                    "temperature": 0.3,
+                    "max_tokens": 4000
                 }
 
+                # Call DeepInfra API
                 try:
                     response = requests.post(
-                        OPENROUTER_API_URL,
+                        DEEPINFRA_API_URL,
                         headers=headers,
                         json=payload,
-                        timeout=30
+                        timeout=45
                     )
                     response.raise_for_status()
                     ai_reply = response.json()["choices"][0]["message"]["content"]
                 except requests.exceptions.RequestException as e:
-                    st.error(f"❌ OpenRouter API error: {str(e)}")
+                    st.error(f"❌ DeepInfra API error: {str(e)}")
                     if response.status_code == 429:
-                        st.error("You've exceeded your rate limits. Please try again later or upgrade your plan.")
+                        st.error("Free tier limit reached. Try again later or upgrade.")
                     return
 
                 # Process AI response
@@ -116,6 +107,7 @@ def main():
                     st.subheader("Processed Data Preview")
                     st.dataframe(cleaned_df)
                     
+                    # Prepare download
                     output = BytesIO()
                     with pd.ExcelWriter(output, engine='openpyxl') as writer:
                         cleaned_df.to_excel(writer, index=False)
